@@ -1,0 +1,74 @@
+# Byte-compiled files
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Data files (never commit raw data)
+data/raw/*.csv
+data/raw/*.json
+data/raw/*.xlsx
+data/interim/*.csv
+data/interim/*.json
+data/processed/*.csv
+data/processed/*.json
+
+# Keep directory structure with placeholder files
+!data/raw/.gitkeep
+!data/interim/.gitkeep
+!data/processed/.gitkeep
+
+# Large model artifacts
+models/*.joblib
+models/*.pkl
+models/*.pt
+models/*.bin
+!models/.gitkeep
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
+
+# pytest cache
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Environment variables (credentials)
+.env
+*.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Reports with large generated figures
+reports/figures/*.png
+reports/figures/*.pdf
+!reports/figures/.gitkeep
+
+# Node modules (Phase 8 frontend)
+frontend/node_modules/
+frontend/.env
+frontend/dist/
+
+# Python distribution
+*.egg
+*.egg-info/
+
+# Coverage
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml

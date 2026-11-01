@@ -1,0 +1,196 @@
+# ============================================================
+# College Complaint Intelligence System — Project Configuration
+# ============================================================
+# All numeric values here are PROVISIONAL starting points.
+# They will be updated after Phase 2 EDA and Phase 3 experiments.
+
+project:
+  name: "College Complaint Intelligence System"
+  version: "0.1.0"
+  random_seed: 42
+  language: "en"
+
+# ----------------------------------------------------------
+# Paths  (relative to project root)
+# ----------------------------------------------------------
+paths:
+  data_raw: "data/raw"
+  data_interim: "data/interim"
+  data_processed: "data/processed"
+  models: "models"
+  reports: "reports"
+  figures: "reports/figures"
+  experiment_results: "reports/experiment_results.csv"
+  notebooks: "notebooks"
+
+# ----------------------------------------------------------
+# Data settings
+# ----------------------------------------------------------
+data:
+  # Minimum complaint text length (characters) to retain
+  min_text_length: 10
+  # Maximum text length in characters (for truncation/warning)
+  max_text_length: 2000
+  # Stratified split ratios (must sum to 1.0)
+  train_ratio: 0.70
+  val_ratio: 0.15
+  test_ratio: 0.15
+  # Column names in the dataset
+  text_column: "complaint_text"
+  label_column: "category"
+  id_column: "complaint_id"
+  timestamp_column: "created_at"
+  location_column: "location"
+  data_source_column: "data_source"
+
+# ----------------------------------------------------------
+# Category definitions (provisional — validate in Phase 2)
+# ----------------------------------------------------------
+categories:
+  C01: "Hostel and Accommodation"
+  C02: "Electricity and Water"
+  C03: "Internet and Network"
+  C04: "Mess and Food"
+  C05: "Academic and Examination"
+  C06: "Classroom and Laboratory"
+  C07: "Sanitation and Cleanliness"
+  C08: "Campus Safety"
+  C09: "Transportation"
+  C10: "Administrative Services"
+  C11: "Other / Unclassified"
+
+# Minimum examples per category before considering merge
+category_min_examples: 30
+
+# ----------------------------------------------------------
+# Text preprocessing (provisional)
+# ----------------------------------------------------------
+preprocessing:
+  lowercase: true
+  remove_punctuation: true
+  remove_numbers: false       # Keep numbers — "Block 3" is meaningful
+  remove_stopwords: true
+  stemming: false             # Prefer lemmatization if using spaCy
+  lemmatization: true
+  min_token_length: 2
+  # PII masking patterns (regex)
+  pii_patterns:
+    - pattern: '\b\d{10}\b'
+      replacement: '[PHONE]'
+    - pattern: '\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+      replacement: '[EMAIL]'
+    - pattern: '\b\d{2}[A-Z]{3}\d{4}\b'
+      replacement: '[ROLL_NO]'  # example roll number pattern; adjust per institution
+
+# ----------------------------------------------------------
+# TF-IDF Vectorizer (Experiment E1 starting point)
+# ----------------------------------------------------------
+tfidf:
+  word:
+    max_features: 10000
+    ngram_range: [1, 2]
+    min_df: 2
+    max_df: 0.95
+    sublinear_tf: true
+  char:
+    max_features: 15000
+    ngram_range: [3, 5]
+    analyzer: "char_wb"
+    min_df: 2
+    max_df: 0.95
+    sublinear_tf: true
+
+# ----------------------------------------------------------
+# Classification models (provisional hyperparameters)
+# ----------------------------------------------------------
+classification:
+  # Confidence threshold below which prediction routes to human review
+  confidence_threshold: 0.60
+  logistic_regression:
+    C: 1.0
+    max_iter: 1000
+    class_weight: "balanced"
+    solver: "lbfgs"
+    multi_class: "multinomial"
+  svm:
+    C: 1.0
+    class_weight: "balanced"
+    # CalibratedClassifierCV wraps LinearSVC for probability output
+    calibration_method: "sigmoid"
+  naive_bayes:
+    alpha: 1.0  # Laplace smoothing
+
+# ----------------------------------------------------------
+# Sentence embeddings (Phase 4+ only if justified)
+# ----------------------------------------------------------
+embeddings:
+  model_name: "all-MiniLM-L6-v2"  # 80MB, CPU-friendly
+  batch_size: 64
+  normalize: true
+
+# ----------------------------------------------------------
+# Duplicate detection (provisional thresholds — tuned in Phase 5)
+# ----------------------------------------------------------
+duplicate_detection:
+  # Thresholds are PROVISIONAL until tuned on validation data
+  high_threshold: 0.85    # "Probable duplicate — review immediately"
+  mid_threshold: 0.60     # "Similar complaint — may be related"
+  top_k_candidates: 10    # Number of candidate matches to return
+
+# ----------------------------------------------------------
+# Priority assessment (Approved Phase 6 rules engine)
+# ----------------------------------------------------------
+priority:
+  scale: [0.0, 100.0]
+  levels:
+    - CRITICAL
+    - HIGH
+    - MEDIUM
+    - LOW
+  # Score thresholds (0-100 scale)
+  thresholds:
+    high: 75.0
+    medium: 45.0
+    # CRITICAL is triggered by safety override / verified hazards
+  # Canonical formula weights (sum = 1.0)
+  weights:
+    severity: 0.35
+    safety_risk: 0.25
+    affected_population: 0.20
+    waiting_time: 0.10
+    recurrence: 0.10
+  # Waiting time SLA (hours to reach 100% urgency)
+  sla_hours_max: 72.0
+  # Recurrence count to reach 100% saturation
+  recurrence_max: 5
+
+
+# ----------------------------------------------------------
+# Clustering (provisional — Phase 7)
+# ----------------------------------------------------------
+clustering:
+  # Range to search for optimal k
+  k_min: 3
+  k_max: 20
+  # DBSCAN starting parameters (must be tuned)
+  dbscan_eps: 0.5
+  dbscan_min_samples: 5
+  # Number of top representative complaints per cluster to display
+  top_representatives: 5
+
+# ----------------------------------------------------------
+# API (Phase 8)
+# ----------------------------------------------------------
+api:
+  host: "0.0.0.0"
+  port: 8000
+  reload: true  # dev only
+
+# ----------------------------------------------------------
+# Database (Phase 8)
+# ----------------------------------------------------------
+database:
+  # Connection string loaded from environment variable DATABASE_URL
+  # Never hardcode credentials here
+  pool_size: 5
+  max_overflow: 10
