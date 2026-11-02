@@ -123,6 +123,18 @@ export const apiOverridePriority = async (id, override_priority, reason, options
   });
 };
 
+export const apiOverrideCategory = async (id, override_category, reason, options = {}) => {
+  return apiRequest(`/complaints/${id}/category-override`, {
+    method: 'POST',
+    body: JSON.stringify({
+      override_category: String(override_category),
+      reason: String(reason || 'Staff category review').trim(),
+    }),
+    ...options,
+  });
+};
+
+
 // Analytics API
 export const apiGetAnalyticsOverview = async (options = {}) => {
   return apiRequest('/analytics/overview', options);

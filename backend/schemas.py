@@ -134,9 +134,10 @@ class ComplaintListItem(BaseModel):
     student_dept: str | None = None
     status: str
     created_at: datetime
-    updated_at: datetime
+    updated_at: datetime | None = None
     predicted_category: str | None = None
     category_name: str | None = None
+    assigned_department: str | None = None
     confidence: float | None = None
     final_priority: str | None = None
     safety_flag: bool = False
@@ -155,7 +156,8 @@ class ComplaintDetailResponse(BaseModel):
     student_dept: str | None = None
     status: str
     created_at: datetime
-    updated_at: datetime
+    updated_at: datetime | None = None
+    assigned_department: str | None = None
 
     prediction: PredictionResponse | None = None
     priority: PriorityResponse | None = None
@@ -170,6 +172,12 @@ class ComplaintStatusUpdateRequest(BaseModel):
 class PriorityOverrideRequest(BaseModel):
     override_priority: str = Field(..., pattern="^(CRITICAL|HIGH|MEDIUM|LOW)$")
     reason: str = Field(..., min_length=5, max_length=500)
+
+
+class CategoryOverrideRequest(BaseModel):
+    override_category: str = Field(..., pattern="^C(0[1-9]|1[0-1])$")
+    reason: str = Field(default="Staff category correction during human review", min_length=3, max_length=500)
+
 
 
 # =========================================================================

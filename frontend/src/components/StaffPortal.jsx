@@ -323,6 +323,11 @@ export default function StaffPortal({ currentUser }) {
                             <span style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.8125rem' }}>
                               {catDisplay}
                             </span>
+                            {c?.assigned_department && (
+                              <span style={{ fontSize: '0.6875rem', color: '#475569' }}>
+                                {c.assigned_department}
+                              </span>
+                            )}
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                               <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
                                 {formatPercent(c.confidence)}

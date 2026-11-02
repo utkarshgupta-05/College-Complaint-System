@@ -38,7 +38,7 @@ export default function Header({ currentUser, onSwitchRole, onLogout }) {
               College Complaint Intelligence System
             </h1>
             <p style={{ fontSize: '0.75rem', color: '#64748b' }}>
-              Phase 8 Automated Routing &bull; Priority Triage &bull; Pattern Discovery
+              Automated Triage &bull; Calibrated Routing &bull; Priority Governance &bull; Pattern Discovery
             </p>
           </div>
         </div>

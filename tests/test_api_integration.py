@@ -23,11 +23,13 @@ from backend.routers.complaints import (
     analyze_complaint_preview,
     get_complaint,
     list_complaints,
+    override_category,
     override_priority,
     submit_complaint,
     update_complaint_status,
 )
 from backend.schemas import (
+    CategoryOverrideRequest,
     ComplaintAnalyzeRequest,
     ComplaintCreateRequest,
     ComplaintStatusUpdateRequest,
@@ -296,4 +298,95 @@ def test_analytics_endpoints(test_db):
     for cl in clusters:
         assert cl.size > 0
         assert isinstance(cl.representative_complaints, list)
+
+
+def test_category_override_by_staff(test_db):
+    """Test staff overriding the predicted category, updating category name, and clearing review flag."""
+    student = test_db.query(User).filter(User.username == "test_student").first()
+    staff = test_db.query(User).filter(User.username == "test_staff").first()
+
+    req = ComplaintCreateRequest(
+        complaint_text="Digital oscilloscope in lab 2 is smoking and displaying error code",
+        location="Lab 2",
+    )
+    cmp_obj = submit_complaint(req, student, test_db)
+
+    # 1. Staff corrects category to C06 (Classroom and Laboratory)
+    override_req = CategoryOverrideRequest(
+        override_category="C06",
+        reason="Staff reviewed and confirmed this is instructional lab equipment, not sanitation"
+    )
+    updated = override_category(cmp_obj.id, override_req, staff, test_db)
+
+    assert updated.prediction.predicted_category == "C06"
+    assert updated.prediction.category_name == "Classroom and Laboratory"
+    assert updated.prediction.needs_human_review is False
+    assert "Instructional Facilities" in updated.assigned_department
+
+    # 2. Student cannot override category (permission check)
+    with pytest.raises(HTTPException) as exc:
+        override_category(cmp_obj.id, override_req, student, test_db)
+    assert exc.value.status_code == 403
+
+
+def test_assigned_department_and_filtering(test_db):
+    """Test assigned department resolution and department filtering in list_complaints."""
+    student = test_db.query(User).filter(User.username == "test_student").first()
+    staff = test_db.query(User).filter(User.username == "test_staff").first()
+
+    # Submit 2 complaints
+    c1 = submit_complaint(
+        ComplaintCreateRequest(complaint_text="Wi-Fi connectivity completely down in Library 2nd floor", location="Library"),
+        student,
+        test_db,
+    )
+    c2 = submit_complaint(
+        ComplaintCreateRequest(complaint_text="Washroom tap leaking clean water on Hostel Block B floor 1", location="Hostel B"),
+        student,
+        test_db,
+    )
+
+    # Check detail response contains assigned_department
+    d1 = get_complaint(c1.id, staff, test_db)
+    assert d1.assigned_department is not None
+
+    # Check list response contains assigned_department
+    all_items = list_complaints(staff, test_db)
+    for it in all_items:
+        if it.predicted_category:
+            assert it.assigned_department is not None
+
+    # Filter by department
+    it_items = list_complaints(staff, test_db, department="Network")
+    assert any(c.id == c1.id for c in it_items)
+
+
+def test_empty_database_analytics_and_clusters(tmp_path):
+    """Test analytics endpoints gracefully handle an empty database without exceptions."""
+    db_file = tmp_path / "empty.db"
+    engine = create_engine(f"sqlite:///{db_file}", connect_args={"check_same_thread": False})
+    Base.metadata.create_all(bind=engine)
+    Session = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    db = Session()
+
+    admin = User(
+        username="empty_admin",
+        email="ea@test.edu",
+        hashed_password=hash_password("adminpass"),
+        role=UserRole.ADMIN.value,
+    )
+    db.add(admin)
+    db.commit()
+
+    # Analytics overview on empty database
+    overview = get_analytics_overview(admin, db)
+    assert overview.total_complaints == 0
+    assert overview.category_distribution == []
+    assert "No complaints" in overview.trend_warning
+
+    # Recurring clusters on empty database
+    clusters = get_recurring_clusters(admin, db)
+    assert clusters == []
+    db.close()
+
 

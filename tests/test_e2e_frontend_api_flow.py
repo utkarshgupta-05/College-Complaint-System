@@ -21,6 +21,7 @@ from backend.routers.complaints import (
     get_complaint,
     update_complaint_status,
     override_priority,
+    override_category,
 )
 from backend.routers.analytics import get_analytics_overview, get_recurring_clusters
 from backend.schemas import (
@@ -29,6 +30,7 @@ from backend.schemas import (
     ComplaintCreateRequest,
     ComplaintStatusUpdateRequest,
     PriorityOverrideRequest,
+    CategoryOverrideRequest,
 )
 
 @pytest.fixture
@@ -183,4 +185,34 @@ def test_admin_analytics_and_unsupervised_clusters(isolated_db):
         assert hasattr(cl, "size")
         assert hasattr(cl, "top_terms")
         assert hasattr(cl, "is_weakly_supported")
+
+
+def test_staff_category_review_and_override_flow(isolated_db):
+    """Test staff reviewing a borderline/low-confidence ticket and executing category correction."""
+    student = isolated_db.query(User).filter(User.username == "student").first()
+    staff = isolated_db.query(User).filter(User.username == "staff").first()
+
+    # Submit a complaint that represents apparatus in a non-lab location (SYN-00196-style)
+    submit_req = ComplaintCreateRequest(
+        complaint_text="Digital oscilloscope and function generators in Sports Complex Badminton Court are faulty",
+        location="Sports Complex",
+        student_dept="ECE"
+    )
+    created = submit_complaint(submit_req, current_user=student, db=isolated_db)
+
+    # Verify created ticket has assigned_department
+    detail = get_complaint(complaint_id=created.id, current_user=staff, db=isolated_db)
+    assert detail.assigned_department is not None
+
+    # Staff accepts or corrects the category to C06 (Classroom and Laboratory)
+    cat_req = CategoryOverrideRequest(
+        override_category="C06",
+        reason="Verified this is laboratory instrumentation despite sports complex venue tag"
+    )
+    updated = override_category(complaint_id=created.id, req=cat_req, current_user=staff, db=isolated_db)
+    assert updated.prediction.predicted_category == "C06"
+    assert updated.prediction.category_name == "Classroom and Laboratory"
+    assert updated.prediction.needs_human_review is False
+    assert "Instructional Facilities" in updated.assigned_department
+
 

@@ -28,6 +28,7 @@ from backend.models import (
     UserRole,
 )
 from backend.schemas import (
+    CategoryOverrideRequest,
     ComplaintAnalyzeRequest,
     ComplaintAnalyzeResponse,
     ComplaintCreateRequest,
@@ -41,6 +42,8 @@ from backend.schemas import (
     StaffOverrideRecordResponse,
 )
 from backend.services.ai_service import ai_service
+from src.taxonomy import get_category_name, get_department_for_category
+
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +107,10 @@ def _format_complaint_detail(complaint: Complaint) -> ComplaintDetailResponse:
         for o in sorted(complaint.priority_overrides, key=lambda x: x.timestamp)
     ]
 
+    assigned_dept = None
+    if complaint.prediction and complaint.prediction.predicted_category:
+        assigned_dept = get_department_for_category(complaint.prediction.predicted_category)
+
     return ComplaintDetailResponse(
         id=complaint.id,
         user_id=complaint.user_id,
@@ -114,6 +121,7 @@ def _format_complaint_detail(complaint: Complaint) -> ComplaintDetailResponse:
         status=complaint.status,
         created_at=complaint.created_at,
         updated_at=complaint.updated_at,
+        assigned_department=assigned_dept,
         prediction=pred_res,
         priority=prio_res,
         duplicate_suggestions=dup_list,
@@ -237,6 +245,7 @@ def list_complaints(
     category: Annotated[str | None, Query(description="Filter by category code (C01-C11)")] = None,
     priority: Annotated[str | None, Query(description="Filter by final priority (CRITICAL/HIGH/MEDIUM/LOW)")] = None,
     needs_review: Annotated[bool | None, Query(description="Filter complaints requiring human review")] = None,
+    department: Annotated[str | None, Query(description="Filter by assigned department or student department")] = None,
 ):
     """Retrieve list of complaints with role-based visibility and filters."""
     query = db.query(Complaint).options(
@@ -267,6 +276,20 @@ def list_complaints(
 
     items = []
     for c in complaints:
+        assigned_dept = (
+            get_department_for_category(c.prediction.predicted_category)
+            if c.prediction and c.prediction.predicted_category
+            else None
+        )
+
+        # Department filter check if requested
+        if department:
+            dept_lower = department.lower().strip()
+            matches_assigned = assigned_dept and dept_lower in assigned_dept.lower()
+            matches_student = c.student_dept and dept_lower in c.student_dept.lower()
+            if not (matches_assigned or matches_student):
+                continue
+
         items.append(
             ComplaintListItem(
                 id=c.id,
@@ -280,6 +303,7 @@ def list_complaints(
                 updated_at=c.updated_at,
                 predicted_category=c.prediction.predicted_category if c.prediction else None,
                 category_name=c.prediction.category_name if c.prediction else None,
+                assigned_department=assigned_dept,
                 confidence=c.prediction.confidence if c.prediction else None,
                 final_priority=c.priority.final_priority if c.priority else None,
                 safety_flag=c.priority.safety_flag if c.priority else False,
@@ -411,3 +435,73 @@ def override_priority(
         complaint.id, current_user.username, original_prio, req.override_priority, req.reason
     )
     return _format_complaint_detail(complaint)
+
+
+@router.post("/{complaint_id}/category-override", response_model=ComplaintDetailResponse)
+def override_category(
+    complaint_id: str,
+    req: CategoryOverrideRequest,
+    current_user: Annotated[User, Depends(require_staff)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Override or confirm complaint category (staff and admin only).
+    Corrects the predicted category, updates the category name, clears human review flag,
+    and updates complaint timestamp.
+    """
+    if current_user.role not in [UserRole.STAFF.value, UserRole.ADMIN.value]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Permission denied. Staff or Administrator role required, but your role is '{current_user.role}'.",
+        )
+
+    complaint = db.query(Complaint).options(
+        joinedload(Complaint.prediction),
+        joinedload(Complaint.priority),
+        joinedload(Complaint.student),
+        joinedload(Complaint.duplicate_suggestions),
+        joinedload(Complaint.priority_overrides),
+    ).filter(Complaint.id == complaint_id).first()
+
+    if not complaint:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Complaint '{complaint_id}' not found.",
+        )
+
+    if not complaint.prediction:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Complaint prediction record does not exist.",
+        )
+
+    old_cat = complaint.prediction.predicted_category
+    new_cat_name = get_category_name(req.override_category)
+
+    complaint.prediction.predicted_category = req.override_category
+    complaint.prediction.category_name = new_cat_name
+    complaint.prediction.needs_human_review = False
+    complaint.prediction.low_confidence = False
+    complaint.updated_at = datetime.now(timezone.utc)
+
+    # If priority review flag was due to classification ambiguity, clear it as well
+    if complaint.priority and not complaint.priority.safety_override:
+        complaint.priority.needs_human_review = False
+
+    db.commit()
+    db.refresh(complaint)
+
+    # Re-index complaint in dynamic retriever with corrected category
+    ai_service.index_complaint(
+        complaint_id=complaint.id,
+        text=complaint.complaint_text,
+        category=new_cat_name,
+        location=complaint.location,
+        created_at=complaint.created_at.isoformat() if complaint.created_at else "",
+    )
+
+    logger.info(
+        "Category override applied on %s by %s: %s -> %s (Reason: %s)",
+        complaint.id, current_user.username, old_cat, req.override_category, req.reason
+    )
+    return _format_complaint_detail(complaint)
+

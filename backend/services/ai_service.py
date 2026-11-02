@@ -30,22 +30,13 @@ from src.clustering.frequency import (
 )
 from src.duplicates.similarity import SimilarComplaint, SimilarityLevel, TFIDFSimilarityRetriever
 from src.prioritization.rules import PriorityLevel, PriorityResult, assess_priority
+from src.taxonomy import CANONICAL_TAXONOMY, CATEGORY_DEPARTMENTS
 
 logger = logging.getLogger(__name__)
 
-CATEGORY_NAMES: dict[str, str] = {
-    "C01": "Hostel and Accommodation",
-    "C02": "Electricity and Water",
-    "C03": "Internet and Network",
-    "C04": "Mess and Food",
-    "C05": "Academic and Examination",
-    "C06": "Classroom and Laboratory",
-    "C07": "Sanitation and Cleanliness",
-    "C08": "Campus Safety",
-    "C09": "Transportation",
-    "C10": "Administrative Services",
-    "C11": "Other / Unclassified",
-}
+# Canonical category mapping (aliased from src.taxonomy for backward compatibility)
+CATEGORY_NAMES: dict[str, str] = dict(CANONICAL_TAXONOMY)
+
 
 
 class AIService:

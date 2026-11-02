@@ -4,7 +4,7 @@ import {
   Layers, BarChart2, FileText, ArrowRight, UserCheck, 
   Copy, MapPin, Calendar, Tag, RefreshCw
 } from 'lucide-react';
-import { apiGetComplaintDetail, apiUpdateComplaintStatus, apiOverridePriority } from '../api';
+import { apiGetComplaintDetail, apiUpdateComplaintStatus, apiOverridePriority, apiOverrideCategory } from '../api';
 import { 
   formatNumber, formatPercent, formatDate, safeArray, 
   safeObject, safeString, normalizePriority, normalizeStatus 
@@ -47,6 +47,8 @@ export default function ComplaintDetailModal({ complaintId, complaint: initialCo
   const [newStatus, setNewStatus] = useState(initialComplaint?.status || 'submitted');
   const [overridePriority, setOverridePriority] = useState('HIGH');
   const [overrideReason, setOverrideReason] = useState('');
+  const [overrideCategory, setOverrideCategory] = useState(initialComplaint?.prediction?.predicted_category || 'C01');
+  const [updatingCategory, setUpdatingCategory] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -64,6 +66,9 @@ export default function ComplaintDetailModal({ complaintId, complaint: initialCo
       setNewStatus(data.status);
       const currentPrio = data.priority?.final_priority || 'MEDIUM';
       setOverridePriority(currentPrio.toUpperCase());
+      if (data.prediction?.predicted_category) {
+        setOverrideCategory(data.prediction.predicted_category);
+      }
     } catch (err) {
       console.error('Failed to load complaint details:', err);
       setFetchError(err.message || 'Failed to load ticket details.');
@@ -127,6 +132,23 @@ export default function ComplaintDetailModal({ complaintId, complaint: initialCo
       setErrorMessage(err.message);
     } finally {
       setUpdating(false);
+    }
+  };
+
+  const handleCategoryOverride = async (categoryToSet, reasonToUse) => {
+    setUpdatingCategory(true);
+    setErrorMessage('');
+    setSuccessMessage('');
+    try {
+      const updated = await apiOverrideCategory(complaint.id, categoryToSet, reasonToUse || 'Staff category review');
+      setComplaint(updated);
+      setOverrideCategory(categoryToSet);
+      setSuccessMessage(`Category updated to ${categoryToSet}: ${CATEGORY_NAMES[categoryToSet] || categoryToSet}. Review flag cleared.`);
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      setErrorMessage(err.message);
+    } finally {
+      setUpdatingCategory(false);
     }
   };
 
@@ -316,10 +338,79 @@ export default function ComplaintDetailModal({ complaintId, complaint: initialCo
                       <div style={{ fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>
                         {pred?.predicted_category || 'C11'}: {safeString(pred?.category_name || CATEGORY_NAMES[pred?.predicted_category], 'General')}
                       </div>
+                      {complaint?.assigned_department && (
+                        <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: '2px' }}>
+                          Department: <strong>{complaint.assigned_department}</strong>
+                        </div>
+                      )}
                       <div style={{ fontSize: '0.8125rem', color: '#475569', marginTop: '2px' }}>
-                        Calibrated Confidence: <strong>{formatPercent(pred?.confidence ?? pred?.confidence_score)}</strong> (Threshold: 65%)
+                        Calibrated Confidence: <strong>{formatPercent(pred?.confidence ?? pred?.confidence_score)}</strong> (Threshold: 60%)
                       </div>
                     </div>
+
+                    {/* Staff Category Governance & Review Resolution */}
+                    {isStaffOrAdmin && (
+                      <div style={{ marginBottom: '14px', padding: '10px 12px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
+                          Staff Category Triage &amp; Human Review:
+                        </div>
+
+                        {pred?.needs_human_review && (
+                          <button
+                            type="button"
+                            disabled={updatingCategory}
+                            onClick={() => handleCategoryOverride(pred.predicted_category, 'Staff accepted and confirmed model prediction')}
+                            style={{
+                              width: '100%',
+                              padding: '6px 12px',
+                              backgroundColor: '#dcfce7',
+                              color: '#15803d',
+                              border: '1px solid #bbf7d0',
+                              borderRadius: '6px',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              marginBottom: '8px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '6px',
+                            }}
+                          >
+                            <CheckCircle size={14} /> Accept &amp; Confirm Suggested Category ({pred.predicted_category})
+                          </button>
+                        )}
+
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <select
+                            value={overrideCategory}
+                            onChange={(e) => setOverrideCategory(e.target.value)}
+                            style={{ flex: 1, padding: '6px 10px', fontSize: '0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: '#fff' }}
+                          >
+                            {Object.entries(CATEGORY_NAMES).map(([code, name]) => (
+                              <option key={code} value={code}>{code}: {name}</option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            disabled={updatingCategory}
+                            onClick={() => handleCategoryOverride(overrideCategory, 'Staff corrected category during review')}
+                            style={{
+                              padding: '6px 12px',
+                              backgroundColor: '#2563eb',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: '6px',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {updatingCategory ? 'Updating...' : 'Correct Category'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Probabilities Bars */}
                     {pred?.all_scores && Object.keys(pred.all_scores).length > 0 && (
