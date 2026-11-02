@@ -1,3 +1,0 @@
-complaint_id,complaint_text,true_category,predicted_category,confidence
-SYN-00196,"Digital oscilloscope and function generators in Sports Complex - Indoor Badminton Court are faulty and displaying distorted signals. When approached, staff told us that spare parts have not been sanctioned yet.",C06,C07,0.4052
-SYN-00326,Digital oscilloscope and function generators in Hostel Block A - Floor 3 are faulty and displaying distorted signals. Mid-semester exams are ongoing and this disturbance is making it very difficult to concentrate. Please fix this on priority.,C06,C07,0.2075
