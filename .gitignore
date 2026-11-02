@@ -68,14 +68,18 @@ frontend/dist/
 *.egg-info/
 
 # Documentation, Reports, and Academic Deliverables (kept locally, not in Git repository)
+*.md
+*.csv
+*.docx
+*.doc
+*.pdf
+*.pptx
 docs/
 reports/
 DATASET_CARD.md
 MODEL_CARD.md
 data/README.md
-*.docx
-*.pdf
-*.pptx
+data/external/
 scratch/
 
 # Coverage
